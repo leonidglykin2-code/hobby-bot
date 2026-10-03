@@ -1,8 +1,10 @@
 """Main Telegram bot with scheduled posting"""
 
 import os
+import asyncio
 import schedule
 import time
+import sys
 from datetime import datetime
 from dotenv import load_dotenv
 from telegram import Bot
@@ -12,6 +14,12 @@ from hobby_pool import HobbyPool
 from content_generator import ContentGenerator
 from advertising import AdvertisingGenerator
 from platform_adapter import PlatformAdapter
+
+# Set UTF-8 encoding for Windows
+if sys.platform == 'win32':
+    import io
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
 load_dotenv()
 
@@ -26,94 +34,109 @@ class HobbyBot:
         # Initialize components
         self.hobby_pool = HobbyPool()
         self.content_generator = ContentGenerator()
-        self.advertising_generator = AdvertisingGenerator()
+        self.activity_link_generator = AdvertisingGenerator()
         self.platform_adapter = PlatformAdapter("telegram")
         
         # Initialize Telegram bot
         request = HTTPXRequest(connection_pool_size=8)
         self.bot = Bot(token=self.bot_token, request=request)
         
-        print(f"Bot initialized for channel: {self.channel_id}")
+        print(f"Bot initialized for channel: {self.channel_id}", flush=True)
     
-    def create_post(self):
+    async def create_post(self):
         """Create and post a new hobby update"""
         try:
-            print(f"[{datetime.now()}] Creating new post...")
+            print(f"[{datetime.now()}] Creating new post...", flush=True)
             
             # Select random hobby
             hobby = self.hobby_pool.get_random_hobby()
-            print(f"Selected hobby: {hobby['name']}")
+            print(f"Selected hobby: {hobby['name']}", flush=True)
             
             # Generate content
             content = self.content_generator.generate_hobby_content(hobby)
-            print(f"Generated content: {content['title']}")
+            print(f"Generated content: {content['title']}", flush=True)
             
-            # Generate advertisement
-            advertisement = self.advertising_generator.generate_advertisement(hobby)
-            print(f"Generated advertisement for: {advertisement['keyword']}")
+            # Generate activity link
+            hobby_name = hobby.get('specific_hobby', {}).get('name', hobby['name']) if hobby.get('is_specific') else hobby['name']
+            activity_link = self.activity_link_generator.generate_activity_link(hobby_name)
+            print(f"Generated activity link: {activity_link['title']}", flush=True)
             
             # Format for platform
-            formatted_message = self.platform_adapter.format_message(content, advertisement)
+            formatted_message = self.platform_adapter.format_message(content, activity_link)
             
             # Post to Telegram
-            self._post_to_telegram(formatted_message)
+            await self._post_to_telegram(formatted_message)
             
-            print(f"[{datetime.now()}] Post successfully created and sent!")
+            print(f"[{datetime.now()}] Post successfully created and sent!", flush=True)
             
         except Exception as e:
-            print(f"Error creating post: {e}")
+            print(f"Error creating post: {e}", flush=True)
     
-    def _post_to_telegram(self, formatted_message):
-        """Post formatted message to Telegram channel"""
+    async def _post_to_telegram(self, formatted_message):
+        """Post formatted message to Telegram channel as single message"""
         try:
-            # Send text message
-            self.bot.send_message(
+            # Send single text message without any extra features
+            await self.bot.send_message(
                 chat_id=self.channel_id,
                 text=formatted_message["text"],
                 parse_mode=formatted_message["parse_mode"],
-                disable_web_page_preview=formatted_message["disable_web_page_preview"]
+                disable_web_page_preview=True
             )
             
-            # Note: Image posting would require actual image URLs or file uploads
-            # This is a placeholder for image functionality
-            if formatted_message.get("image_url"):
-                print(f"Image posting not yet implemented - would post: {formatted_message['image_url']}")
+            print("Sent single message only", flush=True)
             
         except Exception as e:
-            print(f"Error posting to Telegram: {e}")
+            print(f"Error posting to Telegram: {e}", flush=True)
             raise
     
     def run_scheduled(self):
         """Run bot with scheduled posts"""
-        # Schedule hourly posts for testing
-        schedule.every().hour.do(self.create_post)
+        # Schedule posts every 3 hours
+        schedule.every(3).hours.do(lambda: asyncio.run(self.create_post()))
         
-        print("Bot started with hourly posting schedule. Press Ctrl+C to stop.")
+        print("Bot started with 3-hour posting schedule.", flush=True)
+        print("Initial post will be sent immediately upon startup.", flush=True)
+        print("Subsequent posts every 3 hours. Press Ctrl+C to stop.", flush=True)
+        
+        # Send initial post immediately
+        try:
+            asyncio.run(self.create_post())
+            print("Initial post sent successfully.", flush=True)
+        except Exception as e:
+            print(f"Initial post failed: {e}", flush=True)
         
         try:
+            print("Scheduler started. Next post in 3 hours.", flush=True)
             while True:
                 schedule.run_pending()
                 time.sleep(60)  # Check every minute
         except KeyboardInterrupt:
-            print("\nBot stopped by user.")
+            print("\nBot stopped by user.", flush=True)
     
     def run_once(self):
         """Run bot once for testing"""
-        self.create_post()
+        asyncio.run(self.create_post())
 
 def main():
     try:
+        print("Starting bot initialization...")
         bot = HobbyBot()
+        print("Bot initialized successfully")
         
-        # For testing, run once
-        print("Running single post for testing...")
-        bot.run_once()
-        
-        # Uncomment below for scheduled posting
-        # bot.run_scheduled()
+        # Check if should run once or scheduled
+        import sys
+        if len(sys.argv) > 1 and sys.argv[1] == "--once":
+            print("Running single post for testing...")
+            asyncio.run(bot.create_post())
+        else:
+            # Run with scheduled posting (every 3 hours with initial post)
+            print("Starting scheduled bot (3-hour intervals with initial post)...")
+            bot.run_scheduled()
         
     except Exception as e:
         print(f"Bot error: {e}")
+        import traceback
+        traceback.print_exc()
 
 if __name__ == "__main__":
     main()

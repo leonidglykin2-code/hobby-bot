@@ -4,12 +4,13 @@ A multi-platform bot that shares interesting hobbies with pictures, descriptions
 
 ## Features
 
-- Hourly automated posts (testing phase)
+- Automated posts every 3 hours (with initial post on startup)
 - Manual update capability
 - AI-generated interesting hobby content
-- Rich media posts with images and descriptions
-- Hobby-related advertising
+- Single-message format with varied content
+- Hobby-related recommendations
 - Multi-platform ready (Telegram → Facebook)
+- Read-only channel with clean format
 
 ## Current Hobby Categories
 
@@ -55,6 +56,5 @@ python manual_update.py
 ## Future Plans
 
 - Facebook channel integration
-- Twice-daily posting schedule
 - Enhanced hobby pool
-- Comment interaction features
+- Advanced content generation
